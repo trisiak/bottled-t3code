@@ -1,0 +1,21 @@
+[project]
+name = "bottled-t3code"
+version = "0.1.0"
+description = "T3 Code server packaged for Cloud in a Bottle"
+requires-python = ">=3.11"
+
+[dependency-groups]
+dev = ["pytest>=8", "ruff>=0.6", "mypy>=1.11"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 119
+
+[tool.mypy]
+strict = true
+
+[tool.ruff.lint.isort]
+force-single-line = true

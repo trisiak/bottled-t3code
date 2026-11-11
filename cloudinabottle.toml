@@ -1,0 +1,29 @@
+[app]
+name = "t3code"
+version = "0.1.0"
+description = "T3 Code server, always on. Runs coding agents (Claude Code, Codex) in this container and serves the T3 Code web app to the instance owner, who is paired automatically."
+
+[runtime.container]
+image = "Dockerfile"
+# nginx front proxy. The T3 Code server itself binds 127.0.0.1:3773 inside the container.
+port = 8080
+
+[routing]
+# Answered by nginx as soon as it is up, so the app is routable while the T3 Code server is still booting.
+health_check = "/_healthz"
+# No public_paths: a T3 Code session is a shell in this container, so every route stays owner-only.
+
+[[links]]
+name = "Pair this browser"
+path = "/_bottle/pair"
+
+[resources]
+# The T3 Code server plus every agent, terminal, build and test run it starts share this ceiling. It is a cap, not a
+# reservation: an idle app costs nothing, and a runaway agent is killed here rather than taking the host down.
+memory_mb = 6144
+cpu_cores = 2.0
+
+[data]
+# Everything that has to survive a rebuild lives under one relocated HOME in app_data: T3 Code's own state (~/.t3),
+# provider logins (~/.claude, ~/.codex), git and gh config, and the checked-out projects (~/projects).
+app_data = true
