@@ -2,7 +2,7 @@
 
 [T3 Code](https://github.com/pingdotgg/t3code) packaged as a [Cloud in a Bottle](https://cloudinabottle.org) app: an always-on T3 Code server in your own instance, with Claude Code and Codex installed, reachable at `https://t3code.<your-domain>/`.
 
-This repo holds only the packaging. The image downloads T3 Code's official release archive, pinned by version and checksum in the `Dockerfile`.
+This repo holds only the packaging. T3 Code itself is installed by its official installer when the container starts, onto the app's data volume.
 
 ## How it fits together
 
@@ -30,7 +30,7 @@ browser -> router (owner-only) -> nginx :8080 -> t3 serve        127.0.0.1:3773
 bottle app deploy https://github.com/trisiak/bottled-t3code --wait
 ```
 
-The first build downloads about 150 MB of T3 Code plus the provider CLIs.
+The first start downloads about 150 MB of T3 Code; until that finishes the app shows a "starting" page.
 
 ## First run
 
@@ -51,7 +51,9 @@ T3 Connect is an outbound tunnel. It does not pass through the router, so access
 
 ## Updating T3 Code
 
-Bump `T3CODE_VERSION` and both `T3CODE_SHA256_*` values in the `Dockerfile` (the checksums are in the release's `SHA256SUMS` file), push, then "Update and reload" the app. `t3 update` does not apply here: it manages a background service the container does not use.
+Restart the app from the dashboard. Every start runs T3 Code's installer, which moves to the newest stable release and verifies the download against the release's checksums; older downloaded versions are removed. If the release host is unreachable, the version already installed keeps running.
+
+T3 Code's own updater (`t3 update`, and the update prompt in its apps) does not apply here: it belongs to a systemd service the container does not run.
 
 ## Tests
 

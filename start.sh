@@ -46,6 +46,32 @@ echo "[start.sh] starting nginx on :8080"
 nginx -c "$APP_DIR/nginx.conf" -g 'daemon off;' &
 NGINX_PID=$!
 
+# T3 Code is installed here rather than in the image, so restarting the app moves it to the newest stable release.
+# A foreground `t3 serve` never updates itself; upstream's updater belongs to its systemd/launchd service. The
+# installer verifies the archive against the release's checksums, skips a version that is already downloaded, and
+# links ~/.local/bin/t3 to it.
+T3_BIN="$PERSIST_HOME/.local/bin/t3"
+T3_VERSIONS="$PERSIST_HOME/.t3/runtime/versions"
+# Downloaded to a file first: piping a failed download into sh would run an empty script and report success.
+# shellcheck disable=SC2016  # $1 is for the inner shell
+if as_app_user sh -c 'curl -fsSL -o "$1" https://t3.codes/install.sh && sh "$1"' _ /tmp/t3-install.sh; then
+    # Each release is a few hundred MB unpacked; keep only the one just linked.
+    CURRENT_VERSION_DIR="$(dirname "$(readlink -f "$T3_BIN")")"
+    for version_dir in "$T3_VERSIONS"/*/; do
+        if [ "$(readlink -f "$version_dir")" != "$CURRENT_VERSION_DIR" ]; then
+            echo "[start.sh] removing old T3 Code runtime $version_dir"
+            rm -rf "$version_dir"
+        fi
+    done
+elif [ -x "$T3_BIN" ]; then
+    # An unreachable release host must not take a working server down.
+    echo "[start.sh] WARNING: could not check for a newer T3 Code; continuing with the installed one" >&2
+else
+    echo "[start.sh] could not install T3 Code and no earlier install exists" >&2
+    exit 1
+fi
+echo "[start.sh] T3 Code $(as_app_user t3 --version)"
+
 echo "[start.sh] starting pairing helper"
 as_app_user python3 "$APP_DIR/pair_helper.py" &
 HELPER_PID=$!

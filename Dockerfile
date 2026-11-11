@@ -29,25 +29,8 @@ RUN usermod --login t3 --home /home/t3 --move-home node \
  && echo 't3 ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/t3 \
  && chmod 0440 /etc/sudoers.d/t3
 
-# T3 Code ships as a self-contained archive per release. Bump the version and both checksums together; the
-# checksums are the release's SHA256SUMS entries.
-ARG T3CODE_VERSION=0.1.9
-ARG T3CODE_SHA256_AMD64=0141025335da334759cecd8db3483e09772f3600ca03674698524e7d94291362
-ARG T3CODE_SHA256_ARM64=52023bc5728a4dee4de361ad6fef7c236f1efb2742ff25e29d5c55e2fb662eea
-RUN set -eu; \
-    case "$(dpkg --print-architecture)" in \
-      amd64) t3_arch=x64; sha="$T3CODE_SHA256_AMD64" ;; \
-      arm64) t3_arch=arm64; sha="$T3CODE_SHA256_ARM64" ;; \
-      *) echo "no T3 Code build for $(dpkg --print-architecture)" >&2; exit 1 ;; \
-    esac; \
-    curl -fsSL -o /tmp/t3.tar.gz \
-      "https://github.com/pingdotgg/t3code/releases/download/v${T3CODE_VERSION}/t3-${T3CODE_VERSION}-linux-${t3_arch}.tar.gz"; \
-    echo "${sha}  /tmp/t3.tar.gz" | sha256sum -c -; \
-    mkdir -p /opt/t3; \
-    tar -xzf /tmp/t3.tar.gz -C /opt/t3 --strip-components=1; \
-    rm /tmp/t3.tar.gz; \
-    ln -s /opt/t3/t3 /usr/local/bin/t3; \
-    t3 --version
+# T3 Code itself is not in the image: start.sh installs the newest stable release onto the persistent volume at
+# every boot.
 
 # Provider CLIs the image starts with. start.sh puts a persistent npm prefix ahead of this one on PATH, so a newer
 # version installed from T3 Code's provider settings wins and survives rebuilds.
