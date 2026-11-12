@@ -1,0 +1,20 @@
+#!/bin/bash
+# Restarts the app container, e.g. so start.sh installs the packages listed in ~/.config/bottle/apt-packages.
+#
+# The app user cannot restart the container itself, but start.sh exits as soon as one of its supervised processes
+# does, and the platform then starts the container again. Ending the pairing helper is the least disruptive way to
+# trigger that.
+
+set -euo pipefail
+
+HELPER=/opt/bottled-t3code/pair_helper.py
+
+if ! pgrep -u "$(id -u)" -f "$HELPER" >/dev/null; then
+    echo "bottle-restart: no pairing helper ($HELPER) owned by $(id -un) is running; nothing to restart" >&2
+    exit 1
+fi
+
+echo "bottle-restart: restarting the container now."
+echo "This ends T3 Code and every session in it, including the one running this command."
+echo "Startup installs the packages in ~/.config/bottle/apt-packages; check ~/.config/bottle/apt-install.log afterwards."
+pkill -TERM -u "$(id -u)" -f "$HELPER"

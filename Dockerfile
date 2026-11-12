@@ -12,22 +12,21 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 # nginx-light, gosu, tini        front proxy, privilege drop, PID 1
 # git, gh, openssh-client, ...   what agents and the built-in terminal expect on a dev box
-# sudo                           lets the app user install packages; they last until the container is rebuilt
 # lib*, fonts-liberation         shared libraries and fonts for the headless Chrome behind T3 Code's browser tabs
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
         nginx-light gosu tini \
-        ca-certificates curl git gh openssh-client jq less procps python3 ripgrep sudo \
+        ca-certificates curl git gh openssh-client jq less procps python3 ripgrep \
         libasound2 libatk-bridge2.0-0 libatk1.0-0 libcairo2 libcups2 libdrm2 libgbm1 libnss3 libpango-1.0-0 \
         libxcomposite1 libxdamage1 libxfixes3 libxkbcommon0 libxrandr2 fonts-liberation \
  && rm -rf /var/lib/apt/lists/*
 
 # The base image's uid 1000 user becomes `t3`. Agents run as this user, never as root: Claude Code refuses its
 # unattended permission mode for root.
+# The platform runs the container with no-new-privileges, so sudo could never work for it; system packages go in
+# ~/.config/bottle/apt-packages instead, which start.sh installs as root at boot.
 RUN usermod --login t3 --home /home/t3 --move-home node \
- && groupmod --new-name t3 node \
- && echo 't3 ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/t3 \
- && chmod 0440 /etc/sudoers.d/t3
+ && groupmod --new-name t3 node
 
 # T3 Code itself is not in the image: start.sh installs the newest stable release onto the persistent volume at
 # every boot.
@@ -42,7 +41,8 @@ RUN npm install -g --prefix /opt/npm-global \
  && npm cache clean --force
 
 COPY start.sh nginx.conf pair_helper.py /opt/bottled-t3code/
-RUN chmod 0755 /opt/bottled-t3code/start.sh
+COPY bottle-restart /usr/local/bin/
+RUN chmod 0755 /opt/bottled-t3code/start.sh /usr/local/bin/bottle-restart
 
 EXPOSE 8080
 

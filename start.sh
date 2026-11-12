@@ -46,6 +46,89 @@ echo "[start.sh] starting nginx on :8080"
 nginx -c "$APP_DIR/nginx.conf" -g 'daemon off;' &
 NGINX_PID=$!
 
+# System packages the owner's agents asked for. The platform runs the container with no-new-privileges, so sudo
+# cannot work for `t3`; instead agents list packages in this file and restart the container (bottle-restart), and
+# they are installed here while still root. The packages live on the container filesystem: they survive a restart
+# but not a rebuild, so the stamp that skips a repeat install lives there too.
+BOTTLE_CONFIG="$PERSIST_HOME/.config/bottle"
+APT_PACKAGES_FILE="$BOTTLE_CONFIG/apt-packages"
+APT_LOG="$BOTTLE_CONFIG/apt-install.log"
+APT_STAMP=/var/lib/bottle-apt.sha256
+# One package per line, optionally pinned. Nothing that starts with `-`, so the file cannot pass options to apt.
+APT_PACKAGE_PATTERN='^[a-z0-9][a-z0-9.+-]*(=[A-Za-z0-9.+:~-]+)?$'
+APT_FILE_NAME_PATTERN='^[A-Za-z0-9][A-Za-z0-9._-]*$'
+
+mkdir -p "$PERSIST_HOME/.config" "$BOTTLE_CONFIG"
+chown -h "$APP_USER:$APP_USER" "$PERSIST_HOME/.config" "$BOTTLE_CONFIG"
+if [ ! -e "$APT_PACKAGES_FILE" ] && [ ! -L "$APT_PACKAGES_FILE" ]; then
+    cat >"$APT_PACKAGES_FILE" <<'EOF'
+# System packages installed with apt-get when the container starts. One per line; `name=version` pins a version.
+# Run `bottle-restart` to apply changes; the result is logged to apt-install.log next to this file.
+# Optional extra repositories: put *.sources or *.list files in apt-sources/ and their keys in apt-keyrings/
+# (copied to /etc/apt/keyrings/, so reference them from there with Signed-By).
+EOF
+    chown -h "$APP_USER:$APP_USER" "$APT_PACKAGES_FILE"
+fi
+
+APT_PACKAGES=()
+while IFS= read -r line || [ -n "$line" ]; do
+    line="${line%%#*}"
+    line="${line#"${line%%[![:space:]]*}"}"
+    line="${line%"${line##*[![:space:]]}"}"
+    [ -n "$line" ] || continue
+    if [[ "$line" =~ $APT_PACKAGE_PATTERN ]]; then
+        APT_PACKAGES+=("$line")
+    else
+        echo "[start.sh] WARNING: ignoring invalid apt package entry: $line" >&2
+    fi
+done < <(cat "$APT_PACKAGES_FILE" 2>/dev/null || true)
+
+if [ "${#APT_PACKAGES[@]}" -gt 0 ]; then
+    # Extra repositories, copied under a prefix so ones removed from the directory are removed here too.
+    rm -f /etc/apt/sources.list.d/bottle-*
+    mkdir -p /etc/apt/keyrings
+    for src in "$BOTTLE_CONFIG"/apt-sources/*.sources "$BOTTLE_CONFIG"/apt-sources/*.list \
+            "$BOTTLE_CONFIG"/apt-keyrings/*; do
+        name="$(basename "$src")"
+        if [ ! -f "$src" ] || ! [[ "$name" =~ $APT_FILE_NAME_PATTERN ]]; then
+            continue
+        fi
+        case "$src" in
+            */apt-sources/*) install -m 0644 "$src" "/etc/apt/sources.list.d/bottle-$name" ;;
+            *) install -m 0644 "$src" "/etc/apt/keyrings/$name" ;;
+        esac
+    done
+
+    # The repositories are part of what was installed, so a change to them reinstalls too.
+    APT_HASH="$(
+        {
+            printf '%s\n' "${APT_PACKAGES[@]}" | LC_ALL=C sort -u
+            cat /etc/apt/sources.list.d/bottle-* 2>/dev/null || true
+        } | sha256sum | cut -d' ' -f1
+    )"
+    if [ "$(cat "$APT_STAMP" 2>/dev/null || true)" = "$APT_HASH" ]; then
+        echo "[start.sh] apt packages already installed: ${APT_PACKAGES[*]}"
+    else
+        echo "[start.sh] installing apt packages: ${APT_PACKAGES[*]} (log: $APT_LOG)"
+        # Recreated rather than appended to, so the log never follows a link the app user left in its place.
+        rm -f "$APT_LOG"
+        install -o "$APP_USER" -g "$APP_USER" -m 0644 /dev/null "$APT_LOG"
+        # A package that fails to install must not keep T3 Code from starting; the next boot retries.
+        if {
+            dpkg --configure -a \
+                && apt-get update \
+                && apt-get install -y --no-install-recommends "${APT_PACKAGES[@]}"
+        } >>"$APT_LOG" 2>&1 </dev/null; then
+            echo "$APT_HASH" >"$APT_STAMP"
+            echo "[start.sh] apt packages installed"
+        else
+            rm -f "$APT_STAMP"
+            echo "[start.sh] WARNING: installing apt packages failed; see $APT_LOG" >&2
+            echo "apt package install FAILED; T3 Code started without them" >>"$APT_LOG"
+        fi
+    fi
+fi
+
 # T3 Code is installed here rather than in the image, so restarting the app moves it to the newest stable release.
 # A foreground `t3 serve` never updates itself; upstream's updater belongs to its systemd/launchd service. The
 # installer verifies the archive against the release's checksums, skips a version that is already downloaded, and
