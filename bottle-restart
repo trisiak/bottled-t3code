@@ -8,8 +8,11 @@
 set -euo pipefail
 
 HELPER=/opt/bottled-t3code/pair_helper.py
+# The helper's whole command line as start.sh launches it, so a process that merely mentions the path (an editor, the
+# shell that runs this script) is neither killed nor mistaken for the helper.
+HELPER_PATTERN="^python3 ${HELPER//./\\.}\$"
 
-if ! pgrep -u "$(id -u)" -f "$HELPER" >/dev/null; then
+if ! pgrep -u "$(id -u)" -f "$HELPER_PATTERN" >/dev/null; then
     echo "bottle-restart: no pairing helper ($HELPER) owned by $(id -un) is running; nothing to restart" >&2
     exit 1
 fi
@@ -17,4 +20,4 @@ fi
 echo "bottle-restart: restarting the container now."
 echo "This ends T3 Code and every session in it, including the one running this command."
 echo "Startup installs the packages in ~/.config/bottle/apt-packages; check ~/.config/bottle/apt-install.log afterwards."
-pkill -TERM -u "$(id -u)" -f "$HELPER"
+pkill -TERM -u "$(id -u)" -f "$HELPER_PATTERN"
