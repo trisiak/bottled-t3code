@@ -91,9 +91,10 @@ done < <(cat "$APT_PACKAGES_SOURCE" 2>/dev/null || true)
 
 # The log describes the latest boot, so agents (who cannot see the container's output) learn about ignored entries
 # and skipped installs too. Recreated rather than appended to, so it never follows a link the app user left in its
-# place; -r so a directory left there does not abort the boot under set -e.
+# place; -r so a directory left there does not abort the boot under set -e. An empty list leaves no log at all, rather
+# than one about an earlier boot's packages.
+rm -rf "$APT_LOG"
 if [ "${#APT_PACKAGES[@]}" -gt 0 ] || [ "${#APT_INVALID[@]}" -gt 0 ]; then
-    rm -rf "$APT_LOG"
     install -o "$APP_USER" -g "$APP_USER" -m 0644 /dev/null "$APT_LOG"
     for entry in "${APT_INVALID[@]}"; do
         echo "WARNING: ignoring invalid apt package entry: $entry" >>"$APT_LOG"
