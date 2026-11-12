@@ -111,7 +111,8 @@ if [ "${#APT_PACKAGES[@]}" -gt 0 ]; then
     else
         echo "[start.sh] installing apt packages: ${APT_PACKAGES[*]} (log: $APT_LOG)"
         # Recreated rather than appended to, so the log never follows a link the app user left in its place.
-        rm -f "$APT_LOG"
+        # -r: a directory left there must not abort the boot under set -e.
+        rm -rf "$APT_LOG"
         install -o "$APP_USER" -g "$APP_USER" -m 0644 /dev/null "$APT_LOG"
         # A package that fails to install must not keep T3 Code from starting; the next boot retries.
         if {
