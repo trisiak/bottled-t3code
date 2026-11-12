@@ -71,6 +71,7 @@ EOF
 fi
 
 APT_PACKAGES=()
+APT_INVALID=()
 while IFS= read -r line || [ -n "$line" ]; do
     line="${line%%#*}"
     line="${line#"${line%%[![:space:]]*}"}"
@@ -79,9 +80,21 @@ while IFS= read -r line || [ -n "$line" ]; do
     if [[ "$line" =~ $APT_PACKAGE_PATTERN ]]; then
         APT_PACKAGES+=("$line")
     else
+        APT_INVALID+=("$line")
         echo "[start.sh] WARNING: ignoring invalid apt package entry: $line" >&2
     fi
 done < <(cat "$APT_PACKAGES_FILE" 2>/dev/null || true)
+
+# The log describes the latest boot, so agents (who cannot see the container's output) learn about ignored entries
+# and skipped installs too. Recreated rather than appended to, so it never follows a link the app user left in its
+# place; -r so a directory left there does not abort the boot under set -e.
+if [ "${#APT_PACKAGES[@]}" -gt 0 ] || [ "${#APT_INVALID[@]}" -gt 0 ]; then
+    rm -rf "$APT_LOG"
+    install -o "$APP_USER" -g "$APP_USER" -m 0644 /dev/null "$APT_LOG"
+    for entry in "${APT_INVALID[@]}"; do
+        echo "WARNING: ignoring invalid apt package entry: $entry" >>"$APT_LOG"
+    done
+fi
 
 if [ "${#APT_PACKAGES[@]}" -gt 0 ]; then
     # Extra repositories, copied under a prefix so ones removed from the directory are removed here too.
@@ -108,12 +121,9 @@ if [ "${#APT_PACKAGES[@]}" -gt 0 ]; then
     )"
     if [ "$(cat "$APT_STAMP" 2>/dev/null || true)" = "$APT_HASH" ]; then
         echo "[start.sh] apt packages already installed: ${APT_PACKAGES[*]}"
+        echo "apt packages already installed: ${APT_PACKAGES[*]}" >>"$APT_LOG"
     else
         echo "[start.sh] installing apt packages: ${APT_PACKAGES[*]} (log: $APT_LOG)"
-        # Recreated rather than appended to, so the log never follows a link the app user left in its place.
-        # -r: a directory left there must not abort the boot under set -e.
-        rm -rf "$APT_LOG"
-        install -o "$APP_USER" -g "$APP_USER" -m 0644 /dev/null "$APT_LOG"
         # A package that fails to install must not keep T3 Code from starting; the next boot retries.
         if {
             dpkg --configure -a \
