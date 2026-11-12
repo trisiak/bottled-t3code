@@ -72,6 +72,10 @@ fi
 
 APT_PACKAGES=()
 APT_INVALID=()
+# Only a regular file is read: a FIFO or device left in its place would block the boot, and with it the only way to
+# fix the file.
+APT_PACKAGES_SOURCE=/dev/null
+[ ! -f "$APT_PACKAGES_FILE" ] || APT_PACKAGES_SOURCE="$APT_PACKAGES_FILE"
 while IFS= read -r line || [ -n "$line" ]; do
     line="${line%%#*}"
     line="${line#"${line%%[![:space:]]*}"}"
@@ -83,7 +87,7 @@ while IFS= read -r line || [ -n "$line" ]; do
         APT_INVALID+=("$line")
         echo "[start.sh] WARNING: ignoring invalid apt package entry: $line" >&2
     fi
-done < <(cat "$APT_PACKAGES_FILE" 2>/dev/null || true)
+done < <(cat "$APT_PACKAGES_SOURCE" 2>/dev/null || true)
 
 # The log describes the latest boot, so agents (who cannot see the container's output) learn about ignored entries
 # and skipped installs too. Recreated rather than appended to, so it never follows a link the app user left in its
