@@ -7,6 +7,9 @@ description = "T3 Code server, always on. Runs coding agents (Claude Code, Codex
 image = "Dockerfile"
 # nginx front proxy. The T3 Code server itself binds 127.0.0.1:3773 inside the container.
 port = 8080
+# Deployment branch: shared by concurrent workloads and browser tabs.
+# Executable mappings also require the host patch in deployment/.
+shm_mb = 1024
 
 [routing]
 # Answered by nginx as soon as it is up, so the app is routable while the T3 Code server is still booting.

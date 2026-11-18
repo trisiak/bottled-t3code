@@ -1,5 +1,9 @@
 # bottled-t3code
 
+This is a deployment branch for Linux amd64 with Wine/i386, MinGW, OpenCV native libraries
+and 1 GiB shared memory. See [deployment instructions](deployment/README.md) before deploying.
+The general-purpose project remains on `main`.
+
 [T3 Code](https://github.com/pingdotgg/t3code) packaged as a [Cloud in a Bottle](https://cloudinabottle.org) app: an always-on T3 Code server in your own instance, with Claude Code and Codex installed, reachable at `https://t3code.<your-domain>/`.
 
 This repo holds only the packaging. T3 Code itself is installed by its official installer when the container starts, onto the app's data volume.
@@ -23,6 +27,7 @@ browser -> router (owner-only) -> nginx :8080 -> t3 serve        127.0.0.1:3773
 - `~/.claude`, `~/.codex`, `~/.config/gh`, `~/.gitconfig`, `~/.ssh`: logins
 - `~/projects`: your checkouts. T3 Code starts here.
 - `~/.npm-global`: anything installed with `npm install -g`, including provider CLI updates made from T3 Code's settings. It comes before the image's copies on `PATH`.
+- `~/.local/bin`, `~/.local/share/uv`, `~/.cache/uv`: user tools, uv-managed Python versions and downloads
 
 Restarting and rebuilding are different. A restart (from the dashboard, or `bottle-restart`) keeps the container's own filesystem, so apt packages installed at boot stay installed. A rebuild (redeploy) starts from a fresh image. It keeps only the data volume above, so the package list is installed again on the first boot after it.
 
@@ -43,9 +48,9 @@ Notes:
 
 ## Deploy
 
-```
-bottle app deploy https://github.com/trisiak/bottled-t3code --wait
-```
+For this deployment branch, follow the [deployment runbook](deployment/README.md). It includes
+host mount configuration, isolated image validation, switching the existing app to this branch,
+and rollback. Do not deploy or restart while jobs are active.
 
 The first start downloads about 150 MB of T3 Code; until that finishes the app shows a "starting" page.
 

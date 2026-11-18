@@ -1,0 +1,14 @@
+--- a/compute_space/src/compute_space/core/containers.py
++++ b/compute_space/src/compute_space/core/containers.py
+@@ -403,7 +403,10 @@
+             "--log-opt=max-size=1mb",
+         ]
+     )
+-    if manifest.shm_mb > 0:
++    if app_name == "t3code" and manifest.shm_mb == 1024:
++        # Deployment-specific executable shared memory; preserve all other isolation.
++        cmd.append("--tmpfs=/dev/shm:rw,nosuid,nodev,exec,size=1g,mode=1777")
++    elif manifest.shm_mb > 0:
+         cmd.append(f"--shm-size={manifest.shm_mb}m")
+     for cap in sorted(DEFAULT_CAPABILITIES):
+         cmd.extend(["--cap-add", cap])

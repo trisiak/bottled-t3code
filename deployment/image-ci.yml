@@ -1,0 +1,24 @@
+name: Deployment image
+
+on:
+  push:
+    branches: [maciek/cogwalker-container-setup]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build deployment image
+        run: docker build -t bottled-t3code:runtime .
+      - name: Check dependencies and executable shared memory as unprivileged user
+        run: |
+          docker run --rm --network=none --user=1000:1000 --read-only \
+            --security-opt=no-new-privileges:true --cap-drop=ALL \
+            --tmpfs=/dev/shm:rw,nosuid,nodev,exec,size=1g,mode=1777 \
+            --entrypoint=python3 bottled-t3code:runtime \
+            /opt/bottled-t3code/check-runtime.py

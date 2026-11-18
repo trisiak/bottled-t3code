@@ -6,20 +6,33 @@
 #     -> 127.0.0.1:3773       t3 serve
 #     -> 127.0.0.1:3774       pair_helper.py (signs the owner's browser in to T3 Code)
 
+FROM ghcr.io/astral-sh/uv:0.13.5 AS uv
 FROM node:24-bookworm-slim
 
 ENV DEBIAN_FRONTEND=noninteractive
 
+# Deployment branch defaults: 32-bit Windows workloads and Python image processing.
+# Keep these defaults on this branch; the general-purpose main branch does not need them.
+ARG EXTRA_APT_PACKAGES="wine wine32:i386 gcc-mingw-w64-i686 unzip libgl1"
+ARG EXTRA_APT_ARCHITECTURES="i386"
+
 # nginx-light, gosu, tini        front proxy, privilege drop, PID 1
 # git, gh, openssh-client, ...   what agents and the built-in terminal expect on a dev box
 # lib*, fonts-liberation         shared libraries and fonts for the headless Chrome behind T3 Code's browser tabs
-RUN apt-get update \
+RUN test "$(dpkg --print-architecture)" = amd64 \
+ && for architecture in $EXTRA_APT_ARCHITECTURES; do dpkg --add-architecture "$architecture" || exit; done \
+ && apt-get update \
  && apt-get install -y --no-install-recommends \
         nginx-light gosu tini \
         ca-certificates curl git gh openssh-client jq less procps python3 ripgrep \
         libasound2 libatk-bridge2.0-0 libatk1.0-0 libcairo2 libcups2 libdrm2 libgbm1 libnss3 libpango-1.0-0 \
         libxcomposite1 libxdamage1 libxfixes3 libxkbcommon0 libxrandr2 fonts-liberation \
+        $EXTRA_APT_PACKAGES \
  && rm -rf /var/lib/apt/lists/*
+
+# Project venvs and uv-managed Python versions are created as t3 under persistent HOME.
+# Owner-installed ~/.local/bin tools still take precedence over this image default.
+COPY --from=uv /uv /uvx /usr/local/bin/
 
 # The base image's uid 1000 user becomes `t3`. Agents run as this user, never as root: Claude Code refuses its
 # unattended permission mode for root.
@@ -42,6 +55,7 @@ RUN npm install -g --prefix /opt/npm-global \
 
 COPY start.sh nginx.conf pair_helper.py /opt/bottled-t3code/
 COPY bottle-restart /usr/local/bin/
+COPY deployment/check-runtime.py /opt/bottled-t3code/
 RUN chmod 0755 /opt/bottled-t3code/start.sh /usr/local/bin/bottle-restart
 
 EXPOSE 8080
