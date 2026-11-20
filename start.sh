@@ -150,18 +150,38 @@ fi
 # installer verifies the archive against the release's checksums, skips a version that is already downloaded, and
 # links ~/.local/bin/t3 to it.
 T3_BIN="$PERSIST_HOME/.local/bin/t3"
+
+# Prints the executable the t3 command at $1 runs. The installer writes either a symlink into the versions directory
+# or a launcher script of exactly `#!/bin/sh` and `exec '<path>' "$@"`. readlink -f alone does not resolve the script
+# form: it returns the script itself. Anything else (including a path the installer had to quote-escape) fails.
+t3_launcher_target() {
+    if [ -L "$1" ]; then
+        readlink -f "$1"
+        return
+    fi
+    [ -f "$1" ] && [ "$(wc -l <"$1")" -eq 2 ] && [ "$(sed -n 1p "$1")" = '#!/bin/sh' ] || return 1
+    [[ "$(sed -n 2p "$1")" =~ ^exec\ \'([^\']+)\'\ \"\$@\"$ ]] || return 1
+    printf '%s\n' "${BASH_REMATCH[1]}"
+}
 T3_VERSIONS="$PERSIST_HOME/.t3/runtime/versions"
 # Downloaded to a file first: piping a failed download into sh would run an empty script and report success.
 # shellcheck disable=SC2016  # $1 is for the inner shell
 if as_app_user sh -c 'curl -fsSL -o "$1" https://t3.codes/install.sh && sh "$1"' _ /tmp/t3-install.sh; then
-    # Each release is a few hundred MB unpacked; keep only the one just linked.
-    CURRENT_VERSION_DIR="$(dirname "$(readlink -f "$T3_BIN")")"
-    for version_dir in "$T3_VERSIONS"/*/; do
-        if [ "$(readlink -f "$version_dir")" != "$CURRENT_VERSION_DIR" ]; then
-            echo "[start.sh] removing old T3 Code runtime $version_dir"
-            rm -rf "$version_dir"
-        fi
-    done
+    # Each release is a few hundred MB unpacked; keep only the one the t3 command runs.
+    if CURRENT_T3="$(t3_launcher_target "$T3_BIN")" \
+            && CURRENT_VERSION_DIR="$(readlink -f "$(dirname "$CURRENT_T3")")" \
+            && [ -x "$CURRENT_VERSION_DIR/t3" ] \
+            && [ "$(dirname "$CURRENT_VERSION_DIR")" = "$(readlink -f "$T3_VERSIONS")" ]; then
+        for version_dir in "$T3_VERSIONS"/*/; do
+            if [ "$(readlink -f "$version_dir")" != "$CURRENT_VERSION_DIR" ]; then
+                echo "[start.sh] removing old T3 Code runtime $version_dir"
+                rm -rf "$version_dir"
+            fi
+        done
+    else
+        # Pruning without knowing which runtime is live could delete it, so an unrecognized launcher keeps them all.
+        echo "[start.sh] WARNING: cannot tell which T3 Code runtime $T3_BIN runs; not removing old runtimes" >&2
+    fi
 elif [ -x "$T3_BIN" ]; then
     # An unreachable release host must not take a working server down.
     echo "[start.sh] WARNING: could not check for a newer T3 Code; continuing with the installed one" >&2
